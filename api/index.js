@@ -1,6 +1,6 @@
 export const config = { runtime: "edge" };
 
-const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
+const TARGET_BASE = (process.env.TRANSLATE_CODE || "").replace(/\/$/, "");
 
 const STRIP_HEADERS = new Set([
   "host",
@@ -20,7 +20,7 @@ const STRIP_HEADERS = new Set([
 
 export default async function handler(req) {
   if (!TARGET_BASE) {
-    return new Response("Misconfigured: TARGET_DOMAIN is not set", { status: 500 });
+    return new Response("Misconfigured: TRANSLATE_CODE is not set", { status: 500 });
   }
 
   try {
