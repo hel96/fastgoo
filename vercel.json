@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "start-relay",
+  "name": "start-up",
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index" }
   ],
