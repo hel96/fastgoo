@@ -1,7 +1,7 @@
 {
   "name": "start-relay",
   "version": "1.0.0",
-  "description": "Edge-runtime relay for Vercel",
+  "description": "runtime site",
   "private": true,
   "license": "MIT"
 }
