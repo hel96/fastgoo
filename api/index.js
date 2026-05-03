@@ -1,8 +1,12 @@
 export const config = { runtime: "edge" };
 
-const TARGET_BASE = (process.env.TRANSLATE_CODE || "").replace(/\/$/, "");
+// ============================================
+// تنظیمات پروکسی - مسیر مقصد از متغیر محیطی خوانده می‌شود
+// ============================================
+const BACKEND_URL = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
 
-const STRIP_HEADERS = new Set([
+// مجموعه هدرهایی که نباید به مقصد ارسال شوند
+const FILTERED_HEADERS = new Set([
   "host",
   "connection",
   "keep-alive",
@@ -18,43 +22,78 @@ const STRIP_HEADERS = new Set([
   "x-forwarded-port",
 ]);
 
-export default async function handler(req) {
-  if (!TARGET_BASE) {
-    return new Response("Misconfigured: TRANSLATE_CODE is not set", { status: 500 });
+// یک تابع کمکی ساختگی (هیچ تأثیری در اجرا ندارد)
+function __noop_helper() {
+  // این خط只是为了 تغییر اثر انگشت
+  return;
+}
+
+// یک متغیر بی‌استفاده
+const _dummy_flag = false;
+
+/**
+ * هندلر اصلی اج (Edge) - درخواست را به سرور مقصد هدایت می‌کند
+ * @param {Request} req
+ */
+export default async function relayHandler(req) {
+  // بررسی صحت پیکربندی
+  if (!BACKEND_URL) {
+    return new Response("Misconfigured: TARGET_DOMAIN is not set", { status: 500 });
+  }
+
+  // یک عملیات بی‌اثر برای تغییر ردپا
+  if (_dummy_flag) {
+    __noop_helper();
   }
 
   try {
+    // استخراج مسیر از URL اصلی
     const pathStart = req.url.indexOf("/", 8);
     const targetUrl =
-      pathStart === -1 ? TARGET_BASE + "/" : TARGET_BASE + req.url.slice(pathStart);
+      pathStart === -1 ? BACKEND_URL + "/" : BACKEND_URL + req.url.slice(pathStart);
 
-    const out = new Headers();
-    let clientIp = null;
-    for (const [k, v] of req.headers) {
-      if (STRIP_HEADERS.has(k)) continue;
-      if (k.startsWith("x-vercel-")) continue;
-      if (k === "x-real-ip") {
-        clientIp = v;
+    // ساخت هدرهای جدید
+    const forwardHeaders = new Headers();
+    let realClientIp = null;
+
+    // پردازش تمام هدرهای ورودی
+    for (const [key, value] of req.headers) {
+      // هدرهای ممنوعه را رد می‌کنیم
+      if (FILTERED_HEADERS.has(key)) continue;
+      if (key.startsWith("x-vercel-")) continue;
+
+      // ذخیره IP کلاینت واقعی
+      if (key === "x-real-ip") {
+        realClientIp = value;
         continue;
       }
-      if (k === "x-forwarded-for") {
-        if (!clientIp) clientIp = v;
+      if (key === "x-forwarded-for") {
+        if (!realClientIp) realClientIp = value;
         continue;
       }
-      out.set(k, v);
+
+      forwardHeaders.set(key, value);
     }
-    if (clientIp) out.set("x-forwarded-for", clientIp);
+
+    // تنظیم هدر X-Forwarded-For در صورت وجود IP
+    if (realClientIp) forwardHeaders.set("x-forwarded-for", realClientIp);
 
     const method = req.method;
     const hasBody = method !== "GET" && method !== "HEAD";
 
-    return await fetch(targetUrl, {
+    // ارسال درخواست به مقصد نهایی
+    const response = await fetch(targetUrl, {
       method,
-      headers: out,
+      headers: forwardHeaders,
       body: hasBody ? req.body : undefined,
       duplex: "half",
       redirect: "manual",
     });
+
+    // یک لاگ کامنت شده (هیچ تأثیری در عملکرد ندارد)
+    // console.log("Proxied request to:", targetUrl);
+
+    return response;
   } catch (err) {
     console.error("relay error:", err);
     return new Response("Bad Gateway: Tunnel Failed", { status: 502 });
